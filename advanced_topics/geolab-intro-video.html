@@ -1,0 +1,943 @@
+<title>Introducing GeoLab</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#F4F7FB;
+    --panel:#FFFFFF;
+    --ink:#0E1626;
+    --dim:#4A5B78;
+    --line:#D8E1EE;
+    --accent:#0E9E8A;
+    --accent-2:#C97A12;
+    --font-display:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+    --font-body:'Inter',system-ui,-apple-system,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+
+    /* the stage is a screen-within-the-page: fixed cinematic palette, independent of site theme */
+    --v-bg:#0A111F;
+    --v-panel:#121B2E;
+    --v-panel-2:#16223A;
+    --v-ink:#EAF1FB;
+    --v-dim:#8CA0C2;
+    --v-line:#26374F;
+    --v-accent:#35D0BA;
+    --v-accent-2:#F2A93B;
+    --v-kw:#F2A93B;
+    --v-str:#8FD19E;
+    --v-fn:#35D0BA;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0B1220;
+      --panel:#121B2E;
+      --ink:#EAF1FB;
+      --dim:#93A4C0;
+      --line:#223049;
+      --accent:#35D0BA;
+      --accent-2:#F2A93B;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0B1220;
+    --panel:#121B2E;
+    --ink:#EAF1FB;
+    --dim:#93A4C0;
+    --line:#223049;
+    --accent:#35D0BA;
+    --accent-2:#F2A93B;
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--ink); font-family:var(--font-body);}
+  h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0;}
+  p{margin:0;}
+  button{font-family:inherit;}
+
+  .page{
+    max-width:920px;
+    margin:0 auto;
+    padding-inline:20px;
+    padding-block:32px 56px;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+  }
+
+  /* ---------- header ---------- */
+  .eyebrow{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--font-mono);
+    font-size:.72rem;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .eyebrow svg{width:18px;height:18px;flex:none;}
+  header h1{font-size:clamp(1.6rem,4vw,2.4rem); font-weight:700; margin-top:6px;}
+  header p.lede{color:var(--dim); font-size:.98rem; max-width:60ch; margin-top:8px; line-height:1.55;}
+  header .runtime{font-family:var(--font-mono); font-size:.78rem; color:var(--dim); margin-top:10px;}
+  header .runtime strong{color:var(--ink);}
+
+  /* ---------- player shell ---------- */
+  .player{display:flex; flex-direction:column; gap:12px;}
+
+  .stage-wrap{
+    position:relative;
+    border-radius:16px;
+    overflow:hidden;
+    background:var(--v-bg);
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 20px 50px -30px rgba(0,0,0,.6);
+    border:1px solid var(--line);
+  }
+  .stage{
+    position:relative;
+    width:100%;
+    aspect-ratio:16/9;
+    overflow:hidden;
+    font-family:var(--font-body);
+    color:var(--v-ink);
+  }
+
+  .scene{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:clamp(16px,4vw,44px);
+    opacity:0;
+    transition:opacity .55s ease;
+    pointer-events:none;
+  }
+  .scene.active{opacity:1; pointer-events:auto;}
+
+  .scene-label{
+    position:absolute;
+    top:clamp(10px,2.5vw,20px); left:clamp(10px,2.5vw,20px);
+    font-family:var(--font-mono);
+    font-size:.66rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--v-dim);
+    display:flex; align-items:center; gap:6px;
+  }
+  .scene-label .dot{width:6px;height:6px;border-radius:50%;background:var(--v-accent);}
+
+  /* captions */
+  .captions{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:10px clamp(14px,4vw,40px) clamp(14px,3vw,22px);
+    background:linear-gradient(to top, rgba(6,10,18,.85), rgba(6,10,18,0));
+    text-align:center;
+    z-index:5;
+  }
+  .captions p{
+    display:inline-block;
+    font-size:clamp(.82rem,2.1vw,1.05rem);
+    line-height:1.4;
+    color:#fff;
+    max-width:38ch;
+  }
+  .captions[hidden]{display:none;}
+
+  /* poster / big play */
+  .poster-btn{
+    position:absolute; inset:0; z-index:10;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(6,10,18,.34);
+    border:none; cursor:pointer;
+    color:#fff;
+  }
+  .poster-btn .ring{
+    width:clamp(54px,10vw,76px); height:clamp(54px,10vw,76px);
+    border-radius:50%;
+    background:rgba(10,17,31,.72);
+    border:1.5px solid rgba(255,255,255,.5);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .15s ease, background .15s ease;
+  }
+  .poster-btn:hover .ring{transform:scale(1.06); background:rgba(53,208,186,.28);}
+  .poster-btn svg{width:38%; height:38%; fill:#fff; margin-left:3px;}
+  .poster-btn[hidden]{display:none;}
+
+  /* ---------- shared mockup components (fixed dark "screen" palette) ---------- */
+  .mock-browser{
+    width:100%; max-width:560px;
+    border-radius:10px; overflow:hidden;
+    background:var(--v-panel);
+    border:1px solid var(--v-line);
+    box-shadow:0 18px 40px -22px rgba(0,0,0,.65);
+  }
+  .mock-browser .chrome{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 12px;
+    background:var(--v-panel-2);
+    border-bottom:1px solid var(--v-line);
+  }
+  .chrome .traffic{display:flex; gap:5px; flex:none;}
+  .chrome .traffic span{width:8px;height:8px;border-radius:50%;display:block;}
+  .chrome .traffic span:nth-child(1){background:#e5675f;}
+  .chrome .traffic span:nth-child(2){background:#e6b45e;}
+  .chrome .traffic span:nth-child(3){background:#5fbf6c;}
+  .chrome .url{
+    flex:1; min-width:0;
+    font-family:var(--font-mono); font-size:.68rem;
+    color:var(--v-dim);
+    background:var(--v-bg);
+    border:1px solid var(--v-line);
+    border-radius:999px;
+    padding:5px 12px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .mock-browser .content{padding:clamp(14px,3vw,26px);}
+
+  .pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:var(--font-mono); font-size:.66rem;
+    padding:4px 10px; border-radius:999px;
+    background:var(--v-bg); border:1px solid var(--v-line); color:var(--v-dim);
+  }
+  .pill-row{display:flex; flex-wrap:wrap; gap:6px;}
+
+  .btn-launch{
+    font-family:var(--font-display); font-weight:600; font-size:.84rem;
+    color:#06231f;
+    background:var(--v-accent);
+    border:none; border-radius:8px;
+    padding:9px 16px;
+    display:inline-flex; align-items:center; gap:6px;
+    box-shadow:0 0 0 0 rgba(53,208,186,.55);
+  }
+  .scene.active .btn-launch.pulse{animation:launchGlow 1.8s ease-in-out infinite;}
+
+  @keyframes launchGlow{
+    0%,100%{box-shadow:0 0 0 0 rgba(53,208,186,.45);}
+    50%{box-shadow:0 0 0 10px rgba(53,208,186,0);}
+  }
+
+  /* jupyter mockup */
+  .mock-jupyter{
+    width:100%; max-width:600px;
+    border-radius:10px; overflow:hidden;
+    background:var(--v-panel);
+    border:1px solid var(--v-line);
+    display:flex; flex-direction:column;
+    box-shadow:0 18px 40px -22px rgba(0,0,0,.65);
+    font-size:.72rem;
+  }
+  .mock-jupyter .topbar{
+    display:flex; align-items:center; gap:10px;
+    padding:7px 12px; background:var(--v-panel-2); border-bottom:1px solid var(--v-line);
+  }
+  .mock-jupyter .topbar .mark{display:flex; align-items:center; gap:5px; font-family:var(--font-display); font-weight:600; color:var(--v-ink);}
+  .mock-jupyter .topbar .mark svg{width:14px;height:14px;}
+  .mock-jupyter .topbar .tab{
+    font-family:var(--font-mono); font-size:.64rem; color:var(--v-dim);
+    background:var(--v-bg); border:1px solid var(--v-line); border-radius:6px; padding:3px 8px;
+  }
+  .mock-jupyter .topbar .status{
+    margin-left:auto; display:flex; align-items:center; gap:5px;
+    font-family:var(--font-mono); font-size:.62rem; color:var(--v-accent);
+  }
+  .mock-jupyter .topbar .status .dot{width:6px;height:6px;border-radius:50%;background:var(--v-accent);}
+  .mock-jupyter .body{display:flex;}
+  .mock-jupyter .files{
+    width:118px; flex:none; padding:10px 8px; border-right:1px solid var(--v-line);
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .mock-jupyter .files .f{
+    display:flex; align-items:center; gap:5px;
+    font-family:var(--font-mono); font-size:.6rem; color:var(--v-dim);
+  }
+  .mock-jupyter .files .f.on{color:var(--v-ink);}
+  .mock-jupyter .files .f svg{width:10px;height:10px;flex:none;}
+  .mock-jupyter .main{flex:1; min-width:0; padding:12px 14px; display:flex; flex-direction:column; gap:8px;}
+  .mock-jupyter .md-cell{font-family:var(--font-display); font-weight:600; font-size:.86rem; color:var(--v-ink);}
+  .mock-jupyter .code-cell{
+    font-family:var(--font-mono); font-size:.66rem; line-height:1.65;
+    background:var(--v-bg); border:1px solid var(--v-line); border-radius:6px; padding:8px 10px;
+    color:var(--v-ink); overflow-x:auto;
+  }
+  .tok-kw{color:var(--v-kw);}
+  .tok-str{color:var(--v-str);}
+  .tok-fn{color:var(--v-fn);}
+  .tok-c{color:var(--v-dim);}
+  .out-cell{
+    border:1px solid var(--v-line); border-radius:6px; padding:8px 10px;
+    background:var(--v-panel-2);
+  }
+  .out-cell svg{display:block; width:100%; height:auto;}
+  .out-cell .axis{font-family:var(--font-mono); font-size:.56rem; fill:var(--v-dim);}
+
+  /* waveform draw-in */
+  .scene.active .waveform path{
+    stroke-dasharray:900;
+    stroke-dashoffset:900;
+    animation:draw 2s ease-out forwards;
+  }
+  @keyframes draw{ to{stroke-dashoffset:0;} }
+
+  /* gnss pulse */
+  .gnss-pulse circle{transform-origin:center; transform-box:fill-box;}
+  .scene.active .gnss-pulse .ring{animation:pulseRing 2.4s ease-out infinite;}
+  .scene.active .gnss-pulse .ring.r2{animation-delay:.6s;}
+  .scene.active .gnss-pulse .ring.r3{animation-delay:1.2s;}
+  @keyframes pulseRing{
+    0%{transform:scale(.4); opacity:.9;}
+    100%{transform:scale(1.6); opacity:0;}
+  }
+
+  .dots-loop::after{content:'';}
+  .scene.active .dots-loop::after{animation:dots 1.4s steps(4) infinite;}
+  @keyframes dots{
+    0%{content:'';} 25%{content:'.';} 50%{content:'..';} 75%{content:'...';} 100%{content:'';}
+  }
+
+  /* cold-open triptych */
+  .triptych{display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .tri-card{
+    width:148px; padding:12px; border-radius:10px;
+    background:var(--v-panel); border:1px solid var(--v-line);
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    opacity:0; transform:translateY(10px);
+  }
+  .scene.active .tri-card{animation:cardIn .6s ease forwards;}
+  .scene.active .tri-card:nth-child(2){animation-delay:.15s;}
+  .scene.active .tri-card:nth-child(3){animation-delay:.3s;}
+  @keyframes cardIn{ to{opacity:1; transform:translateY(0);} }
+  .tri-card .cap{font-family:var(--font-mono); font-size:.6rem; color:var(--v-dim); text-align:center;}
+
+  /* title card */
+  .titlecard{text-align:center; position:relative;}
+  .titlecard .topo{position:absolute; inset:-20% -10%; z-index:-1; opacity:.35;}
+  .titlecard h2{font-size:clamp(1.5rem,5vw,2.6rem); color:var(--v-ink); font-weight:700;}
+  .titlecard .sub{font-family:var(--font-mono); font-size:.75rem; color:var(--v-accent); letter-spacing:.08em; text-transform:uppercase; margin-bottom:10px;}
+
+  /* lower third */
+  .lower-third{
+    position:absolute; left:clamp(14px,4vw,36px); bottom:clamp(56px,14vw,88px);
+    display:flex; align-items:center; gap:10px;
+    background:rgba(10,17,31,.82);
+    border-left:3px solid var(--v-accent-2);
+    padding:9px 16px;
+    max-width:80%;
+  }
+  .lower-third .step{
+    font-family:var(--font-mono); font-size:.62rem; color:var(--v-accent-2); letter-spacing:.08em;
+  }
+  .lower-third .txt{font-family:var(--font-display); font-weight:600; font-size:.86rem; color:var(--v-ink);}
+  .dimmed{filter:brightness(.55) saturate(.7);}
+
+  /* classroom grid */
+  .grid-4{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; width:100%; max-width:280px;}
+  .mini-laptop{
+    background:var(--v-panel); border:1px solid var(--v-line); border-radius:8px; padding:6px;
+  }
+  .mini-laptop .bar{display:flex; align-items:center; gap:4px; margin-bottom:5px;}
+  .mini-laptop .bar span{width:4px;height:4px;border-radius:50%; background:var(--v-line);}
+  .mini-laptop .lines{display:flex; flex-direction:column; gap:3px;}
+  .mini-laptop .lines i{display:block; height:4px; border-radius:2px; background:var(--v-line);}
+  .mini-laptop .lines i.a{width:70%; background:var(--v-accent); opacity:.7;}
+  .mini-laptop .lines i.b{width:90%;}
+  .mini-laptop .lines i.c{width:55%;}
+  .mini-laptop .live{
+    display:flex; align-items:center; gap:4px; margin-top:6px;
+    font-family:var(--font-mono); font-size:.52rem; color:var(--v-accent);
+  }
+  .mini-laptop .live .d{width:5px;height:5px;border-radius:50%;background:var(--v-accent);}
+
+  /* compute slider (research scene) */
+  .compute-card{
+    width:100%; max-width:200px; flex:none;
+    background:var(--v-panel); border:1px solid var(--v-line); border-radius:8px; padding:10px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .compute-card .lbl{font-family:var(--font-mono); font-size:.58rem; color:var(--v-dim); display:flex; justify-content:space-between;}
+  .compute-track{height:5px; border-radius:999px; background:var(--v-line); overflow:hidden;}
+  .compute-fill{height:100%; width:18%; background:var(--v-accent); border-radius:999px;}
+  .scene.active .compute-fill{animation:scaleUp 3.2s ease-in-out infinite alternate;}
+  @keyframes scaleUp{ from{width:18%;} to{width:92%;} }
+  .chip-row{display:flex; flex-direction:column; gap:6px;}
+  .chip{
+    display:flex; align-items:center; gap:6px;
+    font-family:var(--font-mono); font-size:.58rem; color:var(--v-dim);
+    background:var(--v-bg); border:1px solid var(--v-line); border-radius:6px; padding:5px 8px;
+  }
+  .chip svg{width:11px;height:11px; flex:none; color:var(--v-accent);}
+
+  .split{display:flex; gap:18px; align-items:center; justify-content:center; width:100%; flex-wrap:wrap;}
+
+  /* end card */
+  .endcard{text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px;}
+  .endcard .mark{width:44px;height:44px; color:var(--v-accent);}
+  .endcard h2{font-size:clamp(1.3rem,4vw,1.9rem); color:var(--v-ink);}
+  .endcard .tag{color:var(--v-dim); font-size:.85rem;}
+  .url-row{display:flex; gap:10px; flex-wrap:wrap; justify-content:center;}
+  .url-chip{
+    font-family:var(--font-mono); font-size:.72rem;
+    color:var(--v-ink); text-decoration:none;
+    background:var(--v-panel); border:1px solid var(--v-line);
+    padding:7px 12px; border-radius:8px;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .url-chip:hover{border-color:var(--v-accent); color:var(--v-accent);}
+  .url-chip svg{width:12px;height:12px;}
+
+  /* signup form mockup */
+  .form-mock{display:flex; flex-direction:column; gap:8px; width:180px;}
+  .field{display:flex; flex-direction:column; gap:3px;}
+  .field label{font-family:var(--font-mono); font-size:.56rem; color:var(--v-dim);}
+  .field .box{height:22px; border:1px solid var(--v-line); border-radius:5px; background:var(--v-bg);}
+  .toast{
+    display:flex; align-items:center; gap:6px;
+    font-family:var(--font-mono); font-size:.64rem; color:var(--v-accent);
+    background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:6px;
+    padding:6px 10px; opacity:0; transform:translateY(6px);
+  }
+  .scene.active .toast{animation:toastIn .5s ease forwards; animation-delay:1.4s;}
+  @keyframes toastIn{ to{opacity:1; transform:translateY(0);} }
+  .toast svg{width:12px;height:12px;}
+
+  /* ---------- controls ---------- */
+  .controls{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 14px; border-radius:12px;
+    background:var(--panel); border:1px solid var(--line);
+  }
+  .ctrl-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:34px; height:34px; border-radius:8px;
+    background:transparent; border:1px solid var(--line); color:var(--ink);
+    cursor:pointer;
+  }
+  .ctrl-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .ctrl-btn svg{width:16px;height:16px; fill:currentColor;}
+  .ctrl-btn .icon-b{display:none;}
+  .ctrl-btn.is-on .icon-a{display:none;}
+  .ctrl-btn.is-on .icon-b{display:inline-flex;}
+  .ctrl-btn[disabled]{opacity:.35; cursor:not-allowed;}
+  .ctrl-btn.cc-off{opacity:.4;}
+
+  .track{
+    flex:1; min-width:120px; height:6px; border-radius:999px;
+    background:var(--line); position:relative; overflow:hidden;
+  }
+  .track .fill{position:absolute; inset:0 auto 0 0; width:0%; background:var(--accent); border-radius:999px;}
+
+  .time{font-family:var(--font-mono); font-size:.72rem; color:var(--dim); white-space:nowrap; font-variant-numeric:tabular-nums;}
+
+  /* ---------- chapters ---------- */
+  .chapters{
+    display:flex; gap:8px; overflow-x:auto; padding-bottom:4px;
+    scrollbar-width:thin;
+  }
+  .chapter{
+    flex:none;
+    display:flex; align-items:center; gap:7px;
+    font-family:var(--font-body); font-size:.78rem;
+    padding:7px 12px; border-radius:999px;
+    background:var(--panel); border:1px solid var(--line); color:var(--dim);
+    cursor:pointer; white-space:nowrap;
+  }
+  .chapter .n{font-family:var(--font-mono); font-size:.68rem; color:var(--dim);}
+  .chapter.current{border-color:var(--accent); color:var(--ink); background:color-mix(in srgb, var(--accent) 12%, var(--panel));}
+  .chapter.current .n{color:var(--accent);}
+
+  /* ---------- transcript ---------- */
+  details.transcript{
+    border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--panel);
+  }
+  details.transcript summary{cursor:pointer; font-weight:600; font-size:.9rem;}
+  .transcript ol{margin:14px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:10px;}
+  .transcript li strong{display:block; font-size:.72rem; color:var(--accent); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px;}
+  .transcript li p{color:var(--dim); font-size:.88rem; line-height:1.55;}
+
+  footer.note{font-size:.76rem; color:var(--dim); line-height:1.5;}
+
+  @media (max-width:480px){
+    .split{flex-direction:column;}
+    .mock-jupyter .files{display:none;}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .scene{transition:opacity .01s linear;}
+    .scene.active .waveform path{animation:none; stroke-dashoffset:0;}
+    .scene.active .gnss-pulse .ring{animation:none; opacity:.5;}
+    .scene.active .tri-card{animation:none; opacity:1; transform:none;}
+    .scene.active .btn-launch.pulse{animation:none;}
+    .scene.active .compute-fill{animation:none; width:60%;}
+    .scene.active .toast{animation:none; opacity:1; transform:none;}
+    .dots-loop::after{animation:none;}
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<div class="page">
+
+  <header>
+    <div class="eyebrow">
+      <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="16" cy="16" rx="14" ry="6" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".6"/><circle cx="30" cy="16" r="1.6" fill="currentColor"/></svg>
+      EarthScope &middot; GeoLab
+    </div>
+    <h1>Introducing GeoLab</h1>
+    <p class="lede">A narrated walkthrough of creating a free EarthScope account, launching GeoLab, and why it's built for geophysics teaching and research. Press play, or read along in the transcript below.</p>
+    <p class="runtime">Runtime: <strong id="runtimeLabel">&hellip;</strong> &middot; narrated in-browser, captions always on</p>
+  </header>
+
+  <div class="player">
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+
+        <!-- Scene 0: cold open -->
+        <section class="scene" data-title="Cold Open">
+          <div class="scene-label"><span class="dot"></span>01 &middot; Cold Open</div>
+          <div class="triptych">
+            <div class="tri-card">
+              <svg class="waveform" viewBox="0 0 140 46" width="100%" height="40">
+                <path d="M0,23 L8,23 L12,8 L16,38 L20,14 L24,30 L28,23 L36,23 L40,4 L44,42 L48,20 L52,26 L56,23 L64,23 L68,12 L72,34 L76,23 L84,23 L88,6 L92,40 L96,18 L100,28 L104,23 L112,23 L116,15 L120,31 L124,23 L140,23" fill="none" stroke="var(--v-accent)" stroke-width="1.6"/>
+              </svg>
+              <div class="cap">seismic_2024.mseed</div>
+            </div>
+            <div class="tri-card">
+              <div style="font-family:var(--font-mono); font-size:.62rem; color:var(--v-ink); text-align:center;">pip install obspy<span class="dots-loop"></span></div>
+              <div class="cap">local environment setup</div>
+            </div>
+            <div class="tri-card">
+              <svg class="gnss-pulse" viewBox="0 0 60 60" width="46" height="46">
+                <circle class="ring" cx="30" cy="30" r="10" fill="none" stroke="var(--v-accent)" stroke-width="1.4"/>
+                <circle class="ring r2" cx="30" cy="30" r="10" fill="none" stroke="var(--v-accent)" stroke-width="1.4"/>
+                <circle class="ring r3" cx="30" cy="30" r="10" fill="none" stroke="var(--v-accent)" stroke-width="1.4"/>
+                <path d="M30 34 L24 44 L36 44 Z" fill="var(--v-ink)"/>
+                <rect x="29" y="20" width="2" height="14" fill="var(--v-ink)"/>
+              </svg>
+              <div class="cap">P123 &middot; GNSS station</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scene 1: title -->
+        <section class="scene" data-title="Introducing GeoLab">
+          <div class="scene-label"><span class="dot"></span>02 &middot; Title</div>
+          <div class="titlecard">
+            <div class="sub">EarthScope Consortium presents</div>
+            <h2>Introducing GeoLab</h2>
+          </div>
+        </section>
+
+        <!-- Scene 2: what is geolab (landing mockup) -->
+        <section class="scene" data-title="What Is GeoLab">
+          <div class="scene-label"><span class="dot"></span>03 &middot; What Is GeoLab</div>
+          <div class="mock-browser">
+            <div class="chrome">
+              <div class="traffic"><span></span><span></span><span></span></div>
+              <div class="url">earthscope.org/data/geolab</div>
+            </div>
+            <div class="content">
+              <div class="pill" style="margin-bottom:8px;">GEOLAB NOTEBOOK HUB</div>
+              <div style="font-family:var(--font-display); font-weight:700; font-size:1.05rem; color:var(--v-ink); margin-bottom:10px;">Do geophysics in your browser.</div>
+              <div class="pill-row" style="margin-bottom:14px;">
+                <span class="pill">Jupyter</span>
+                <span class="pill">RStudio</span>
+                <span class="pill">NSF NGF Data Archive</span>
+              </div>
+              <button class="btn-launch" type="button">Launch GeoLab &rarr;</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scene 3: step 1 create account -->
+        <section class="scene" data-title="Step 1: Create an Account">
+          <div class="scene-label"><span class="dot"></span>04 &middot; Step 1</div>
+          <div class="mock-browser dimmed">
+            <div class="chrome">
+              <div class="traffic"><span></span><span></span><span></span></div>
+              <div class="url">earthscope.org/user</div>
+            </div>
+            <div class="content">
+              <div class="split">
+                <div class="form-mock">
+                  <div class="field"><label>Name</label><div class="box"></div></div>
+                  <div class="field"><label>Email</label><div class="box"></div></div>
+                  <div class="field"><label>Password</label><div class="box"></div></div>
+                  <button class="btn-launch" type="button" style="margin-top:4px;">Create account</button>
+                </div>
+                <div class="toast">
+                  <svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" fill="currentColor"/></svg>
+                  Account verified
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="lower-third">
+            <span class="step">STEP 01</span>
+            <span class="txt">Create a free EarthScope account</span>
+          </div>
+        </section>
+
+        <!-- Scene 4: step 2 launch -->
+        <section class="scene" data-title="Step 2: Launch GeoLab">
+          <div class="scene-label"><span class="dot"></span>05 &middot; Step 2</div>
+          <div class="mock-jupyter">
+            <div class="topbar">
+              <div class="mark">
+                <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="16" cy="16" r="2.2" fill="currentColor"/></svg>
+                GeoLab
+              </div>
+              <div class="tab">seismic_intro.ipynb</div>
+              <div class="status"><span class="dot"></span>Python 3 &middot; Running</div>
+            </div>
+            <div class="body">
+              <div class="files">
+                <div class="f on"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="currentColor" opacity=".25"/></svg>seismic_intro.ipynb</div>
+                <div class="f"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="currentColor" opacity=".25"/></svg>gnss_reflectometry.ipynb</div>
+                <div class="f"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="currentColor" opacity=".25"/></svg>data/</div>
+                <div class="f"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="currentColor" opacity=".25"/></svg>learning-hub/</div>
+              </div>
+              <div class="main">
+                <div class="md-cell">Load a seismic waveform</div>
+                <div class="code-cell"><span class="tok-kw">import</span> obspy<br>st = obspy.<span class="tok-fn">read</span>(<span class="tok-str">"data/2024_event.mseed"</span>)<br>st.<span class="tok-fn">plot</span>()</div>
+                <div class="out-cell">
+                  <svg class="waveform" viewBox="0 0 200 48">
+                    <path d="M0,24 L10,24 L14,10 L18,40 L22,18 L26,30 L30,24 L46,24 L50,4 L54,44 L58,20 L62,28 L66,24 L82,24 L86,14 L90,36 L94,24 L110,24 L114,6 L118,42 L122,20 L126,30 L130,24 L146,24 L150,16 L154,32 L158,24 L200,24" fill="none" stroke="var(--v-fn)" stroke-width="1.4"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="lower-third">
+            <span class="step">STEP 02</span>
+            <span class="txt">Launch GeoLab &amp; sign in</span>
+          </div>
+        </section>
+
+        <!-- Scene 5: classroom -->
+        <section class="scene" data-title="For the Classroom">
+          <div class="scene-label"><span class="dot"></span>06 &middot; For the Classroom</div>
+          <div class="split">
+            <div class="mock-jupyter" style="max-width:230px;">
+              <div class="topbar"><div class="mark" style="font-size:.66rem;">Instructor</div><div class="status"><span class="dot"></span>live</div></div>
+              <div class="body"><div class="main">
+                <div class="md-cell" style="font-size:.68rem;">Week 3 &middot; Surface Waves</div>
+                <div class="code-cell" style="font-size:.58rem;"><span class="tok-c"># same notebook, every seat</span></div>
+              </div></div>
+            </div>
+            <div class="grid-4">
+              <div class="mini-laptop"><div class="bar"><span></span><span></span><span></span></div><div class="lines"><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="live"><span class="d"></span>Student 1</div></div>
+              <div class="mini-laptop"><div class="bar"><span></span><span></span><span></span></div><div class="lines"><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="live"><span class="d"></span>Student 2</div></div>
+              <div class="mini-laptop"><div class="bar"><span></span><span></span><span></span></div><div class="lines"><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="live"><span class="d"></span>Student 3</div></div>
+              <div class="mini-laptop"><div class="bar"><span></span><span></span><span></span></div><div class="lines"><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="live"><span class="d"></span>Student 4</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scene 6: research -->
+        <section class="scene" data-title="For Research">
+          <div class="scene-label"><span class="dot"></span>07 &middot; For Research</div>
+          <div class="split">
+            <div class="mock-jupyter" style="max-width:250px;">
+              <div class="topbar"><div class="mark" style="font-size:.66rem;">gnss_reflectometry.ipynb</div><div class="status"><span class="dot"></span>In [*]</div></div>
+              <div class="body"><div class="main">
+                <div class="code-cell" style="font-size:.58rem;"><span class="tok-fn">process</span>(archive, <span class="tok-kw">scale</span>=<span class="tok-str">"full"</span>)<span class="dots-loop"></span></div>
+              </div></div>
+            </div>
+            <div class="compute-card">
+              <div class="lbl"><span>Prototype</span><span>Full archive</span></div>
+              <div class="compute-track"><div class="compute-fill"></div></div>
+              <div class="chip-row">
+                <div class="chip"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 9L2 6v11l10 5 10-5V6l-10 5Z" fill="currentColor"/></svg>GeoLab-learning-hub</div>
+                <div class="chip"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/></svg>Community forum</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scene 7: CTA return -->
+        <section class="scene" data-title="Get Started">
+          <div class="scene-label"><span class="dot"></span>08 &middot; Get Started</div>
+          <div class="mock-browser">
+            <div class="chrome">
+              <div class="traffic"><span></span><span></span><span></span></div>
+              <div class="url">earthscope.org/data/geolab</div>
+            </div>
+            <div class="content">
+              <button class="btn-launch pulse" type="button" style="margin-bottom:12px;">Launch GeoLab &rarr;</button>
+              <div class="pill-row">
+                <span class="pill">Free</span>
+                <span class="pill">Browser-based</span>
+                <span class="pill">No installation</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scene 8: end card -->
+        <section class="scene" data-title="Start Exploring">
+          <div class="scene-label"><span class="dot"></span>09 &middot; Start Exploring</div>
+          <div class="endcard">
+            <svg class="mark" viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="16" cy="16" rx="14" ry="6" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".6"/><circle cx="30" cy="16" r="1.6" fill="currentColor"/></svg>
+            <h2>See you in the notebook.</h2>
+            <div class="url-row">
+              <a class="url-chip" href="https://www.earthscope.org/user" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 8 1.34 8 4v2H4v-2c0-2.66 5.3-4 8-4Zm0-2a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z" fill="currentColor"/></svg>
+                earthscope.org/user
+              </a>
+              <a class="url-chip" href="https://www.earthscope.org/data/geolab" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24"><path d="M4 4h16v4H4zm0 6h10v10H4zm12 0h4v10h-4z" fill="currentColor"/></svg>
+                earthscope.org/data/geolab
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <div class="captions" id="captions"><p id="captionText">&nbsp;</p></div>
+
+        <button class="poster-btn" id="posterBtn" type="button" aria-label="Play video">
+          <span class="ring"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="ctrl-btn" id="restartBtn" type="button" aria-label="Restart">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+      </button>
+      <button class="ctrl-btn" id="playBtn" type="button" aria-label="Play">
+        <span class="icon-a"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+        <span class="icon-b"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></span>
+      </button>
+      <div class="track"><div class="fill" id="trackFill"></div></div>
+      <div class="time"><span id="timeElapsed">0:00</span> / <span id="timeTotal">0:00</span></div>
+      <button class="ctrl-btn" id="ccBtn" type="button" aria-label="Toggle captions">
+        <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="6.2" y="15.5" font-size="8.5" font-family="IBM Plex Mono, monospace" fill="currentColor">CC</text></svg>
+      </button>
+      <button class="ctrl-btn is-on" id="muteBtn" type="button" aria-label="Mute narration">
+        <span class="icon-a"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 12a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12z"/></svg></span>
+        <span class="icon-b"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 5V4L8 9H4z"/><line x1="15" y1="9" x2="21" y2="15" stroke="currentColor" stroke-width="1.8"/><line x1="21" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="1.8"/></svg></span>
+      </button>
+    </div>
+
+    <div class="chapters" id="chapters"></div>
+  </div>
+
+  <details class="transcript">
+    <summary>Read the full transcript</summary>
+    <ol id="transcriptList"></ol>
+  </details>
+
+  <footer class="note">
+    Simulated video &mdash; visuals are mockups (not live product screenshots) and narration uses your browser's built-in speech synthesis, so voice and availability vary by device. Built from the GeoLab intro script; verify UI details against <a href="https://docs.earthscope.org/geolab/" target="_blank" rel="noopener" style="color:var(--accent);">docs.earthscope.org/geolab</a> before recording a real screen capture.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var scenes = [
+    { title: "Cold Open", vo: "Every geophysicist knows this problem: the data is enormous, the software setup takes half a lab session, and by the time everything's installed, the class, or the deadline, is over. What if you could skip all that and start analyzing data in your browser, in seconds?" },
+    { title: "Introducing GeoLab", vo: "This is GeoLab, EarthScope's free, browser-based notebook hub for geophysical research and teaching." },
+    { title: "What Is GeoLab", vo: "GeoLab is a JupyterHub built for the global community of geophysical researchers, educators, and engineers. It runs right next to EarthScope's NSF NGF data archive, so you can explore seismic, GNSS, and strain data without ever downloading it. It comes with Jupyter notebooks and RStudio ready to go, no installation required." },
+    { title: "Step 1: Create an Account", vo: "Getting started takes two steps. First, you need a free EarthScope account. Go to earthscope dot org and click the account icon in the top menu, or head straight to earthscope dot org slash user. Sign up with your email, verify your address, and you're done. This single account is your key to every EarthScope service, and it's completely free." },
+    { title: "Step 2: Launch GeoLab", vo: "Now that you've got an account, let's launch GeoLab. From the GeoLab page, click Launch, and sign in with the account you just created. Choose your environment, GeoLab gives you a standard notebook server, and you can request more memory or CPU if your workflow needs it. Within moments, you're in a full JupyterLab environment, already connected to shared data and pre-loaded example notebooks from the GeoLab Learning Hub." },
+    { title: "For the Classroom", vo: "For instructors, GeoLab removes the biggest barrier to hands-on data science: environment setup. Build a notebook once, with the data, the code, and the explanation together, and every student opens the exact same working environment, on any laptop, from a browser tab. No lost class time troubleshooting installs, just students doing real geophysics from minute one." },
+    { title: "For Research", vo: "For researchers, the benefits go further. Because GeoLab sits right alongside EarthScope's cloud data archive, you can prototype a workflow on a small slice of data, then scale it up to run against the full archive, without ever moving files to your own machine. Your notebooks are reproducible and shareable, so collaborators, reviewers, or your future self can rerun your exact analysis. And when you need help, the Learning Hub and community forum connect you to other researchers solving similar problems." },
+    { title: "Get Started", vo: "GeoLab is free to use, runs entirely in your browser, and puts you next to the data instead of making you chase it. Whether you're teaching your first seismology lab or scaling up a continent-wide GNSS analysis, GeoLab is built to get you there faster." },
+    { title: "Start Exploring", vo: "Create your free account at earthscope dot org, launch GeoLab, and start exploring. We'll see you in the notebook." }
+  ];
+
+  function splitSentences(text){
+    var m = text.match(/[^.!?]+[.!?]*/g);
+    return (m || [text]).map(function(s){ return s.trim(); }).filter(Boolean);
+  }
+
+  var cues = [];
+  scenes.forEach(function(sc, si){
+    splitSentences(sc.vo).forEach(function(sentence){
+      var words = sentence.split(/\s+/).filter(Boolean).length;
+      var dur = Math.min(9000, Math.max(1500, words * 460 + 550));
+      cues.push({ sceneIndex: si, text: sentence, dur: dur });
+    });
+  });
+
+  var cueStarts = [];
+  (function(){
+    var acc = 0;
+    cues.forEach(function(c){ cueStarts.push(acc); acc += c.dur; });
+    window.__totalMs = acc;
+  })();
+  var totalMs = window.__totalMs;
+
+  var sceneStart = scenes.map(function(_, si){
+    for (var i = 0; i < cues.length; i++) if (cues[i].sceneIndex === si) return cueStarts[i];
+    return 0;
+  });
+
+  function fmt(ms){
+    var s = Math.round(ms / 1000);
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  var stage = document.getElementById("stage");
+  var sceneEls = Array.prototype.slice.call(stage.querySelectorAll(".scene"));
+  var captionText = document.getElementById("captionText");
+  var captionsBox = document.getElementById("captions");
+  var posterBtn = document.getElementById("posterBtn");
+  var playBtn = document.getElementById("playBtn");
+  var restartBtn = document.getElementById("restartBtn");
+  var muteBtn = document.getElementById("muteBtn");
+  var ccBtn = document.getElementById("ccBtn");
+  var trackFill = document.getElementById("trackFill");
+  var timeElapsed = document.getElementById("timeElapsed");
+  var timeTotal = document.getElementById("timeTotal");
+  var chaptersBox = document.getElementById("chapters");
+  var runtimeLabel = document.getElementById("runtimeLabel");
+  var transcriptList = document.getElementById("transcriptList");
+
+  timeTotal.textContent = fmt(totalMs);
+  runtimeLabel.textContent = "~" + fmt(totalMs) + " min";
+
+  scenes.forEach(function(sc, i){
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chapter";
+    chip.innerHTML = '<span class="n">0' + (i + 1) + '</span><span>' + sc.title + "</span>";
+    chip.addEventListener("click", function(){ jumpToScene(i); });
+    chaptersBox.appendChild(chip);
+
+    var li = document.createElement("li");
+    li.innerHTML = "<strong>" + (i + 1) + ". " + sc.title + "</strong><p>" + sc.vo + "</p>";
+    transcriptList.appendChild(li);
+  });
+  var chapterEls = Array.prototype.slice.call(chaptersBox.querySelectorAll(".chapter"));
+
+  var ttsSupported = "speechSynthesis" in window;
+  var muted = false;
+  try {
+    muted = localStorage.getItem("geolab-video-muted") === "1";
+  } catch (e) {}
+  if (!ttsSupported) { muted = true; muteBtn.disabled = true; muteBtn.setAttribute("aria-label", "Narration not supported in this browser"); }
+  if (muted) muteBtn.classList.add("is-on");
+  else muteBtn.classList.remove("is-on");
+
+  var elapsed = 0, playing = false, rafId = null, lastTs = null, curCue = -1, curScene = -1, started = false;
+
+  function setScene(si){
+    if (si === curScene) return;
+    curScene = si;
+    sceneEls.forEach(function(el, i){
+      var on = i === si;
+      el.classList.toggle("active", on);
+      el.setAttribute("aria-hidden", on ? "false" : "true");
+    });
+    chapterEls.forEach(function(el, i){ el.classList.toggle("current", i === si); });
+    var current = chapterEls[si];
+    if (current && current.scrollIntoView) current.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }
+
+  function speak(text){
+    if (!ttsSupported || muted) return;
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  function setCue(ci){
+    curCue = ci;
+    var cue = cues[ci];
+    captionText.textContent = cue.text;
+    setScene(cue.sceneIndex);
+    if (playing) speak(cue.text);
+  }
+
+  function cueIndexAt(ms){
+    for (var i = 0; i < cues.length; i++) {
+      if (ms < cueStarts[i] + cues[i].dur) return i;
+    }
+    return cues.length - 1;
+  }
+
+  function applyElapsed(){
+    var ci = cueIndexAt(elapsed);
+    if (ci !== curCue) setCue(ci);
+    trackFill.style.width = Math.min(100, (elapsed / totalMs) * 100) + "%";
+    timeElapsed.textContent = fmt(elapsed);
+  }
+
+  function tick(ts){
+    if (!playing) return;
+    if (lastTs == null) lastTs = ts;
+    elapsed += ts - lastTs;
+    lastTs = ts;
+    if (elapsed >= totalMs) {
+      elapsed = totalMs;
+      applyElapsed();
+      pause();
+      return;
+    }
+    applyElapsed();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function play(){
+    if (!started) { started = true; posterBtn.hidden = true; }
+    if (elapsed >= totalMs) { elapsed = 0; curCue = -1; curScene = -1; }
+    playing = true;
+    lastTs = null;
+    playBtn.classList.add("is-on");
+    playBtn.setAttribute("aria-label", "Pause");
+    applyElapsed();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function pause(){
+    playing = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (ttsSupported) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+    playBtn.classList.remove("is-on");
+    playBtn.setAttribute("aria-label", "Play");
+  }
+
+  function togglePlay(){ if (playing) pause(); else play(); }
+
+  function restart(){
+    pause();
+    elapsed = 0; curCue = -1; curScene = -1;
+    applyElapsed();
+  }
+
+  function jumpToScene(si){
+    pause();
+    elapsed = sceneStart[si];
+    curCue = -1; curScene = -1;
+    if (!started) { started = true; posterBtn.hidden = true; }
+    applyElapsed();
+    play();
+  }
+
+  posterBtn.addEventListener("click", play);
+  playBtn.addEventListener("click", togglePlay);
+  restartBtn.addEventListener("click", restart);
+
+  muteBtn.addEventListener("click", function(){
+    muted = !muted;
+    muteBtn.classList.toggle("is-on", muted);
+    try { localStorage.setItem("geolab-video-muted", muted ? "1" : "0"); } catch (e) {}
+    if (muted) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+    else if (playing && curCue >= 0) { speak(cues[curCue].text); }
+  });
+
+  ccBtn.addEventListener("click", function(){
+    var hidden = captionsBox.hasAttribute("hidden");
+    if (hidden) captionsBox.removeAttribute("hidden"); else captionsBox.setAttribute("hidden", "");
+    ccBtn.classList.toggle("cc-off", !hidden);
+  });
+
+  applyElapsed();
+})();
+</script>
